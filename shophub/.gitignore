@@ -39,7 +39,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# archivos de contexto para asistentes de IA, auto-generados por `next dev`
-CLAUDE.md
-AGENTS.md
