@@ -21,11 +21,11 @@ export default function AddToCartButton({ product, variant = "full" }: AddToCart
   }
 
   const base =
-    "inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed";
   const sizing = variant === "compact" ? "px-3 py-1.5 text-sm" : "px-5 py-3 text-base";
   const color = justAdded
     ? "bg-emerald-600 text-white"
-    : "bg-indigo-600 text-white hover:bg-indigo-700";
+    : "bg-blue-600 text-white hover:bg-blue-700";
 
   return (
     <button

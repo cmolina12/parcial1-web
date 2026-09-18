@@ -2,11 +2,7 @@ import type { ProductDetail, ProductListResponse, ProductSummary } from "@/types
 
 const API_BASE = "https://dummyjson.com";
 
-/**
- * Trae el catálogo (listado resumido) desde DummyJSON.
- * Se ejecuta en el servidor (Server Component), por lo que las credenciales
- * y la URL del servicio nunca llegan al bundle del navegador.
- */
+
 export async function getProducts(): Promise<ProductSummary[]> {
   const res = await fetch(
     `${API_BASE}/products?limit=8&select=id,title,price,category,thumbnail,stock`,
@@ -22,11 +18,7 @@ export async function getProducts(): Promise<ProductSummary[]> {
   return data.products;
 }
 
-/**
- * Trae el detalle completo de un producto por id.
- * Devuelve null cuando el producto no existe (404 de DummyJSON),
- * para que la página pueda decidir mostrar notFound().
- */
+
 export async function getProductById(id: string): Promise<ProductDetail | null> {
   const res = await fetch(`${API_BASE}/products/${id}`, { cache: "no-store" });
 
