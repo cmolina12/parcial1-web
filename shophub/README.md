@@ -1,46 +1,33 @@
 # ShopHub
 
-Plataforma de e-commerce construida con Next.js (App Router) + TypeScript + Tailwind, que consume la API pública de [DummyJSON](https://dummyjson.com) y mantiene un carrito de compras global con React Context.
+Plataforma de e-commerce con Next.js (App Router), TypeScript y Tailwind. Consume la API de DummyJSON y maneja el carrito con React Context.
 
 ## Decisiones de Arquitectura y Cambios del Parcial
 
 ### Punto 1 - Evolución del Contexto
 
-En el preparcial, `CartContext` solo exponía la operación (`addToCart`) sobre un arreglo de `CartItem` (`{ id, title, price, thumbnail, quantity }`). El modelo de datos en sí no cambió en este parcial, sigue siendo el mismo arreglo de `CartItem` con `quantity`, pero en este caso el contexto ahora expone el conjunto completo de operaciones que un carrito transaccional necesita:
+El modelo de datos del carrito no cambió (sigue siendo un arreglo de `CartItem` con `quantity`), pero ahora el contexto tiene todas las operaciones que faltaban: `increaseQuantity`, `decreaseQuantity`, `removeFromCart` y `clearCart`.
 
-- `increaseQuantity(id)` / `decreaseQuantity(id)`: suman o restan 1 a la cantidad de un ítem existente. `decreaseQuantity` elimina el ítem automáticamente cuando su cantidad llegaría a 0.
-- `removeFromCart(id)`: descarta un producto del carrito sin importar su cantidad.
-- `clearCart()`: restablece el carrito a `[]`.
-
-La inmutabilidad se garantiza de la misma forma en las cuatro operaciones, ya que nunca se muta `items` ni ningún `CartItem` existente, siempre se construye una estructura nueva:
-
-- `increaseQuantity` usa `.map()` y reemplaza el ítem afectado por un objeto nuevo, mientras los demás ítems se devuelven tal cual (mismas referencias, sin copiarlos innecesariamente).
-- `decreaseQuantity` encadena dos pasos, ambos inmutables: primero `.map()` resta 1 a la cantidad del ítem objetivo (construyendo un objeto nuevo, sin tocar el original), y después `.filter()` descarta cualquier ítem cuya cantidad haya quedado en 0 o menos.
-- `removeFromCart` usa `.filter()`, que ya devuelve un arreglo nuevo por definición.
-- `clearCart` simplemente reemplaza `items` por una referencia `[]` nueva.
-
-En todos los casos se usa la forma funcional de `setItems((prev) => ...)` para no depender de una closure con el `items` de un render anterior (evita condiciones de carrera si dos actualizaciones se disparan muy seguido).
+Todas mantienen la misma regla del preparcial: nunca se muta `items` directamente. `increaseQuantity` usa `.map()` para reemplazar el ítem afectado por uno nuevo. `decreaseQuantity` hace lo mismo pero encadena un `.filter()` después, para sacar del arreglo cualquier ítem que haya quedado en cantidad 0. `removeFromCart` es un `.filter()` simple, y `clearCart` solo reemplaza `items` por `[]`. En todos los casos se usa `setItems((prev) => ...)` en vez de leer `items` directamente, para evitar problemas si dos actualizaciones se disparan casi al mismo tiempo.
 
 ### Punto 2 - Cálculo de Totales
 
-`count` (unidades totales) y `total` (precio acumulado) no se guardan como estado propio: se derivan de `items` en cada render con dos `.reduce()` directos, calculados justo antes de armar el `value` del contexto:
+`count` y `total` no se guardan en su propio estado: se calculan en cada render con `.reduce()` a partir de `items`.
 
 ```ts
 const count = items.reduce((acc, item) => acc + item.quantity, 0);
 const total = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
 ```
 
-La razón de no duplicar este dato en un `useState` aparte es evitar que ambas fuentes de verdad (el arreglo `items` y un `total` guardado manualmente) se desincronicen si alguien olvida actualizar una de las dos al agregar/quitar un producto. Al derivarlo siempre de `items`, es matemáticamente imposible que el contador del `Header` o el total del checkout queden desactualizados.
+La idea es simple: si `total` viviera en su propio `useState`, habría que acordarse de actualizarlo manualmente en cada operación del carrito, y sería fácil que se desincronizara del arreglo real. Calculándolo siempre a partir de `items`, eso no puede pasar.
 
 ### Punto 3 - Arquitectura del Formulario
 
-El formulario de checkout (`components/checkout/CheckoutForm.tsx`) se implementó como un formulario controlado nativo de React, sin librerías externas : cada campo tiene su `value`/`checked` atado a un objeto de estado (`useState<CheckoutFormState>`) y un `onChange` que lo actualiza de forma inmutable (`setForm((prev) => ({ ...prev, [name]: value }))`), el mismo patrón que ya usa `CartContext` para sus propias actualizaciones.
+El checkout (`CheckoutForm.tsx`) es un formulario controlado normal de React, sin librerías externas. Cada input tiene su `value` en un `useState<CheckoutFormState>` y un `onChange` que actualiza ese estado con spread (`{ ...prev, [name]: value }`), el mismo patrón que ya usa `CartContext`.
 
-Decisiones puntuales:
+Los errores de nombre y correo (`nameError`, `emailError`) no se guardan en estado: se recalculan en cada render llamando a `validateField`, así el botón siempre sabe si el formulario es válido sin depender de que el usuario haya salido del campo. Lo que sí vive en estado es `touched`, que se marca en `onBlur` y controla si el mensaje de error se muestra o no.
 
-- **Validación derivada, no almacenada**: en vez de guardar los mensajes de error en su propio `useState`, `nameError`/`emailError` se recalculan en cada render a partir del valor actual del formulario, llamando a `validateField(name, value)`. Esto garantiza que `isValid` (y por lo tanto el botón de "Confirmar pedido") siempre refleje el estado real del formulario, sin depender de que el usuario haya salido del campo.
-- **Mostrar el error solo se controla con `touched`**: un objeto `useState<{ fullName?: boolean; email?: boolean }>` que se marca en `onBlur`. El mensaje de error (`{touched.email && emailError && <p>...</p>}`) solo se renderiza si el campo fue tocado, separando "¿es válido?" (siempre calculado) de "¿debo mostrar el error?" (solo tras `onBlur`).
-- **Envío asíncrono simulado**: `handleSubmit` hace `e.preventDefault()`, activa `isSubmitting` (que deshabilita todos los campos y el botón, evitando doble envío), espera una `Promise` con `setTimeout` para simular la latencia de un backend real, y al resolver llama `clearCart()` del contexto global, resetea el formulario a su estado inicial y muestra una vista de confirmación.
+El envío es asíncrono: al hacer submit se activa `isSubmitting` (bloquea el botón y los campos), se espera con un `setTimeout` simulando una petición real, y al terminar se limpia el carrito (`clearCart()`), se resetea el formulario y se muestra la confirmación.
 
 ## Inicializar aplicación
 
@@ -49,10 +36,10 @@ npm install
 npm run dev
 ```
 
-Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+Abre [http://localhost:3000](http://localhost:3000).
 
 ## Stack
 
 - [Next.js](https://nextjs.org) (App Router) + TypeScript
 - [Tailwind CSS](https://tailwindcss.com)
-- [DummyJSON](https://dummyjson.com) como servicio externo de datos
+- [DummyJSON](https://dummyjson.com)
